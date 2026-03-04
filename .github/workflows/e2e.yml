@@ -2,9 +2,6 @@ name: E2E (Playwright)
 
 on:
   workflow_dispatch:
-  schedule:
-    # Nightly at 03:17 UTC (adjust anytime)
-    - cron: '17 3 * * *'
 
 concurrency:
   group: e2e-${{ github.ref }}
