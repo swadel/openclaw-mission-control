@@ -22,6 +22,8 @@ export const config = {
     path.join(defaultDataDir, 'mission-control-tokens.json'),
   openclawHome,
   openclawBin: process.env.OPENCLAW_BIN || 'openclaw',
+  // Optional: when OPENCLAW_BIN points to node.exe, provide the openclaw entry module here.
+  openclawEntry: process.env.OPENCLAW_ENTRY || '',
   clawdbotBin: process.env.CLAWDBOT_BIN || 'clawdbot',
   gatewayHost: process.env.OPENCLAW_GATEWAY_HOST || '127.0.0.1',
   gatewayPort: Number(process.env.OPENCLAW_GATEWAY_PORT || '18789'),

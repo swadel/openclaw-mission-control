@@ -127,8 +127,21 @@ function parseToolsFromFile(content: string): { allow?: string[]; raw?: string }
 }
 
 function getConfigPath(): string | null {
+  const explicit =
+    process.env.OPENCLAW_CONFIG_PATH ||
+    process.env.MISSION_CONTROL_OPENCLAW_CONFIG_PATH
+
+  if (explicit && explicit.trim()) return explicit.trim()
+
   if (!config.openclawHome) return null
-  return join(config.openclawHome, 'openclaw.json')
+
+  // Default (linux/mac style)
+  const direct = join(config.openclawHome, 'openclaw.json')
+  if (existsSync(direct)) return direct
+
+  // Windows OpenClaw default: OPENCLAW_HOME points at the user home and the config lives under .openclaw/
+  const dotOpenclaw = join(config.openclawHome, '.openclaw', 'openclaw.json')
+  return dotOpenclaw
 }
 
 /** Safely read a file from an agent's workspace directory */

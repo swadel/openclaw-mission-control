@@ -88,7 +88,7 @@ export function OrchestrationBar() {
       const res = await fetch('/api/agents/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: selectedAgent, content: message, from: 'operator' })
+        body: JSON.stringify({ to: selectedAgent, message, from: 'operator' })
       })
       const data = await res.json()
       if (res.ok) {

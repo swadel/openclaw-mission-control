@@ -33,16 +33,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // OpenClaw CLI does not expose a stable "gateway sessions_send" command.
+    // Use a system event as the supported way to notify/wake an agent.
     await runOpenClaw(
       [
-        'gateway',
-        'sessions_send',
-        '--session',
-        agent.session_key,
-        '--message',
-        `Message from ${from}: ${message}`
+        'system',
+        'event',
+        '--mode',
+        'now',
+        '--text',
+        `Message for ${to} (session: ${agent.session_key})\nFrom ${from}: ${message}`
       ],
-      { timeoutMs: 10000 }
+      { timeoutMs: 15000 }
     )
 
     db_helpers.createNotification(

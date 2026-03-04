@@ -39,9 +39,10 @@ export async function POST(
       customMessage ||
       `Wake up check-in for ${agent.name}. Please review assigned tasks and notifications.`
 
+    // Use 'openclaw system event' for manual wake (documented approach)
     const { stdout, stderr } = await runOpenClaw(
-      ['gateway', 'sessions_send', '--session', agent.session_key, '--message', message],
-      { timeoutMs: 10000 }
+      ['system', 'event', '--text', message, '--mode', 'now'],
+      { timeoutMs: 15000 }
     )
 
     if (stderr && stderr.includes('error')) {
@@ -58,8 +59,23 @@ export async function POST(
       session_key: agent.session_key,
       stdout: stdout.trim()
     })
-  } catch (error) {
+  } catch (error: any) {
     logger.error({ err: error }, 'POST /api/agents/[id]/wake error')
-    return NextResponse.json({ error: 'Failed to wake agent' }, { status: 500 })
+
+    // Return details to the client in dev to speed up local troubleshooting.
+    const details =
+      process.env.NODE_ENV === 'production'
+        ? undefined
+        : {
+            message: String(error?.message ?? error),
+            code: error?.code,
+            stderr: error?.stderr,
+            stdout: error?.stdout
+          }
+
+    return NextResponse.json(
+      { error: 'Failed to wake agent', details },
+      { status: 500 }
+    )
   }
 }

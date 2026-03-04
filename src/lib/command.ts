@@ -23,6 +23,7 @@ export function runCommand(
     const child = spawn(command, args, {
       cwd: options.cwd,
       env: options.env,
+      // Keep shell=false so argument boundaries are preserved (critical for flags like --text).
       shell: false
     })
 
@@ -72,7 +73,13 @@ export function runCommand(
 }
 
 export function runOpenClaw(args: string[], options: CommandOptions = {}) {
-  return runCommand(config.openclawBin, args, {
+  // If OPENCLAW_ENTRY is set (common on Windows when OPENCLAW_BIN is node.exe),
+  // run: node.exe <openclaw.mjs> ...args
+  const finalArgs = config.openclawEntry
+    ? [config.openclawEntry, ...args]
+    : args
+
+  return runCommand(config.openclawBin, finalArgs, {
     ...options,
     cwd: options.cwd || config.openclawHome || process.cwd()
   })

@@ -301,10 +301,20 @@ export async function POST(request: NextRequest) {
           }
         } else {
           try {
+            const isCoordinatorThread =
+              typeof conversation_id === 'string' &&
+              conversation_id.startsWith('coord:')
+
+            const coordinatorPrompt =
+              `You are the Coordinator agent. Reply with a short, direct text answer.\n` +
+              `If you delegate, list which agent(s) you will use.\n\n` +
+              `From ${from}: ${content}`
+
             const invokeParams: any = {
-              message: `Message from ${from}: ${content}`,
+              message: isCoordinatorThread ? coordinatorPrompt : `Message from ${from}: ${content}`,
               idempotencyKey: `mc-${messageId}-${Date.now()}`,
-              deliver: false,
+              // For coordinator threads, request delivery so we can retrieve output.
+              deliver: isCoordinatorThread,
             }
             if (sessionKey) invokeParams.sessionKey = sessionKey
             else invokeParams.agentId = openclawAgentId
@@ -420,16 +430,61 @@ export async function POST(request: NextRequest) {
                     { status: 'error', runId: forwardInfo.runId }
                   )
                 } else if (waitStatus === 'timeout') {
-                  createChatReply(
-                    db,
-                    workspaceId,
-                    conversation_id,
-                    COORDINATOR_AGENT,
-                    from,
-                    'I received your message and I am still processing it. I will post results as soon as execution completes.',
-                    'status',
-                    { status: 'processing', runId: forwardInfo.runId }
-                  )
+                  // Coordinator runs often don't return output via agent.wait; use the reliable openclaw agent fallback.
+                  const fallbackPrompt =
+                    `You are the Coordinator agent. Reply with a short, direct text answer.\n` +
+                    `If you delegate, list which agent(s) you will use.\n\n` +
+                    `From ${from}: ${content}`
+
+                  try {
+                    const fallbackResult = await runOpenClaw(
+                      ['agent', '--agent', COORDINATOR_AGENT, '--message', fallbackPrompt, '--json'],
+                      { timeoutMs: 60000 }
+                    )
+
+                    let fallbackText = ''
+                    try {
+                      const parsed = JSON.parse(String(fallbackResult.stdout || '{}'))
+                      fallbackText = String(parsed?.result?.payloads?.[0]?.text || '').trim()
+                    } catch {
+                      fallbackText = String(fallbackResult.stdout || '').trim()
+                    }
+
+                    if (fallbackText) {
+                      createChatReply(
+                        db,
+                        workspaceId,
+                        conversation_id,
+                        COORDINATOR_AGENT,
+                        from,
+                        fallbackText,
+                        'text',
+                        { status: 'completed', runId: forwardInfo.runId, source: 'timeout-fallback-openclaw-agent' }
+                      )
+                    } else {
+                      createChatReply(
+                        db,
+                        workspaceId,
+                        conversation_id,
+                        COORDINATOR_AGENT,
+                        from,
+                        'I received your message and attempted a fallback execution, but no text payload was returned.',
+                        'status',
+                        { status: 'processing', runId: forwardInfo.runId, source: 'timeout-fallback-openclaw-agent' }
+                      )
+                    }
+                  } catch (err) {
+                    createChatReply(
+                      db,
+                      workspaceId,
+                      conversation_id,
+                      COORDINATOR_AGENT,
+                      from,
+                      'I received your message and I am still processing it. (Fallback execution failed.)',
+                      'status',
+                      { status: 'processing', runId: forwardInfo.runId, source: 'timeout-fallback-openclaw-agent' }
+                    )
+                  }
                 } else {
                   const replyText = extractReplyText(waitPayload)
                   if (replyText) {
@@ -444,16 +499,95 @@ export async function POST(request: NextRequest) {
                       { status: waitStatus || 'completed', runId: forwardInfo.runId }
                     )
                   } else {
-                    createChatReply(
-                      db,
-                      workspaceId,
-                      conversation_id,
-                      COORDINATOR_AGENT,
-                      from,
-                      'Execution accepted and completed. No textual response payload was returned by the runtime.',
-                      'status',
-                      { status: waitStatus || 'completed', runId: forwardInfo.runId }
-                    )
+                    // Fallback: if the gateway runtime didn't return text, try a direct system event that expects a final response.
+                    // This is coordinator-thread-only behavior.
+                    const fallbackPrompt =
+                      `You are the Coordinator agent. Reply with a short, direct text answer.\n` +
+                      `If you delegate, list which agent(s) you will use.\n\n` +
+                      `From ${from}: ${content}`
+
+                    let postedFallbackReply = false
+
+                    try {
+                      // Use `openclaw agent` to run the coordinator agent and capture a real textual reply.
+                      const fallbackResult = await runOpenClaw(
+                        ['agent', '--agent', COORDINATOR_AGENT, '--message', fallbackPrompt, '--json'],
+                        { timeoutMs: 60000 }
+                      )
+
+                      let fallbackText = ''
+                      try {
+                        const parsed = parseGatewayJson(fallbackResult.stdout) || JSON.parse(String(fallbackResult.stdout || '{}'))
+                        fallbackText = String(
+                          parsed?.text ||
+                          parsed?.message ||
+                          parsed?.response ||
+                          parsed?.output?.text ||
+                          parsed?.result?.payloads?.[0]?.text ||
+                          ''
+                        ).trim()
+                      } catch {
+                        fallbackText = String(fallbackResult.stdout || '').trim()
+                      }
+
+                      if (fallbackText) {
+                        postedFallbackReply = true
+                        createChatReply(
+                          db,
+                          workspaceId,
+                          conversation_id,
+                          COORDINATOR_AGENT,
+                          from,
+                          fallbackText,
+                          'text',
+                          { status: 'completed', runId: forwardInfo.runId, source: 'fallback-openclaw-agent' }
+                        )
+                      } else if (process.env.NODE_ENV !== 'production') {
+                        createChatReply(
+                          db,
+                          workspaceId,
+                          conversation_id,
+                          COORDINATOR_AGENT,
+                          from,
+                          `Fallback openclaw agent returned no text. stdout excerpt: ${String(fallbackResult.stdout || '').slice(0, 800)}`,
+                          'status',
+                          { status: 'fallback_empty', runId: forwardInfo.runId, source: 'fallback-openclaw-agent' }
+                        )
+                      }
+                    } catch (fallbackErr: any) {
+                      if (process.env.NODE_ENV !== 'production') {
+                        const msg = String(fallbackErr?.message || fallbackErr)
+                        const stderr = String(fallbackErr?.stderr || '')
+                        createChatReply(
+                          db,
+                          workspaceId,
+                          conversation_id,
+                          COORDINATOR_AGENT,
+                          from,
+                          `Fallback openclaw agent failed: ${msg}\n${stderr}`.slice(0, 1200),
+                          'status',
+                          { status: 'fallback_error', runId: forwardInfo.runId, source: 'fallback-openclaw-agent' }
+                        )
+                      }
+                    }
+
+                    if (!postedFallbackReply) {
+                      const debugPayload =
+                        process.env.NODE_ENV === 'production'
+                          ? ''
+                          : `\n\n(wait payload excerpt) ${JSON.stringify(waitPayload).slice(0, 800)}`
+
+                      createChatReply(
+                        db,
+                        workspaceId,
+                        conversation_id,
+                        COORDINATOR_AGENT,
+                        from,
+                        'Execution accepted and completed. No textual response payload was returned by the runtime.' + debugPayload,
+                        'status',
+                        { status: waitStatus || 'completed', runId: forwardInfo.runId }
+                      )
+                    }
                   }
                 }
               } catch (waitErr) {
