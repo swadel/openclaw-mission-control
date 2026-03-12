@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-const VERSION = '1.3.0'
+const VERSION = '2.0.0'
 export const revalidate = 300
 
 interface Endpoint {
