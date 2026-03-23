@@ -20,6 +20,7 @@ interface DispatchableTask {
   project_ticket_no: number | null
   project_id: number | null
   tags?: string[]
+  metadata: string | null
 }
 
 // ---------------------------------------------------------------------------
@@ -94,6 +95,17 @@ function buildTaskPrompt(task: DispatchableTask, rejectionFeedback?: string | nu
     ? `${task.ticket_prefix}-${String(task.project_ticket_no).padStart(3, '0')}`
     : `TASK-${task.id}`
 
+  // Check for a rich dispatch prompt in task metadata
+  let dispatchPrompt: string | null = null
+  if (task.metadata) {
+    try {
+      const meta = typeof task.metadata === 'string' ? JSON.parse(task.metadata) : task.metadata
+      if (typeof meta?.dispatch_prompt === 'string' && meta.dispatch_prompt) {
+        dispatchPrompt = meta.dispatch_prompt
+      }
+    } catch { /* ignore parse errors */ }
+  }
+
   const lines = [
     'You have been assigned a task in Mission Control.',
     '',
@@ -105,7 +117,15 @@ function buildTaskPrompt(task: DispatchableTask, rejectionFeedback?: string | nu
     lines.push(`Tags: ${task.tags.join(', ')}`)
   }
 
-  if (task.description) {
+  // Use dispatch_prompt as the primary instruction if available,
+  // falling back to description for backward compatibility
+  if (dispatchPrompt) {
+    lines.push('', dispatchPrompt)
+    // Include description as supplementary context if it adds info
+    if (task.description && task.description !== dispatchPrompt) {
+      lines.push('', '## Additional Context', task.description)
+    }
+  } else if (task.description) {
     lines.push('', task.description)
   }
 
