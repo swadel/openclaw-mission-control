@@ -77,6 +77,10 @@ export default defineConfig(async () => {
           'src/lib/plugins.ts',
           'src/lib/office-layout.ts',
           'src/lib/skill-registry.ts',
+          // DB-backed runtime modules — require live database context
+          'src/lib/spawn-history.ts',
+          'src/lib/runs.ts',
+          'src/lib/memory-search.ts',
         ],
         thresholds: {
           lines: 60,

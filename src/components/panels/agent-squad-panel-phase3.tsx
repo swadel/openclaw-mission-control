@@ -432,7 +432,7 @@ export function AgentSquadPanelPhase3() {
                   {/* Header: avatar + name + status */}
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <AgentAvatar name={agent.name} agentId={agent.config?.openclawId ?? agent.name?.toLowerCase()} size="lg" />
+                      <AgentAvatar name={agent.name} agentId={(agent.config as Record<string, unknown>)?.openclawId as string | undefined ?? agent.name?.toLowerCase()} size="lg" />
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
                           <h3 className="font-semibold text-foreground truncate">{agent.name}</h3>
@@ -864,7 +864,7 @@ function AgentDetailModalPhase3({
         <div className="px-5 pt-5 pb-0 border-b border-border">
           <div className="flex justify-between items-center gap-4 mb-4">
             <div className="flex items-center gap-3 min-w-0">
-              <AgentAvatar name={agent.name} agentId={agent.config?.openclawId ?? agent.name?.toLowerCase()} size="lg" />
+              <AgentAvatar name={agent.name} agentId={(agent.config as Record<string, unknown>)?.openclawId as string | undefined ?? agent.name?.toLowerCase()} size="lg" />
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <h3 className="text-lg font-semibold text-foreground leading-tight truncate">{agentState.name}</h3>

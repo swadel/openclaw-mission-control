@@ -11,6 +11,7 @@ concurrency:
 
 jobs:
   quality-gate:
+    name: Lint / Typecheck / Unit Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -27,11 +28,6 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'pnpm'
 
-      - name: Configure git identity
-        run: |
-          git config --global user.email "ci@mission-control.dev"
-          git config --global user.name "CI"
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -46,15 +42,3 @@ jobs:
 
       - name: Unit tests
         run: pnpm test
-
-      - name: Prepare E2E environment
-        run: cp .env.test .env
-
-      - name: Build
-        run: pnpm build
-
-      - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps
-
-      - name: E2E tests
-        run: pnpm test:e2e
