@@ -24,7 +24,8 @@
       "Bash(npx vitest:*)",
       "Bash(pnpm test:*)",
       "Bash(node C:/nvm4w/nodejs/node_modules/openclaw/openclaw.mjs gateway agents)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(gh run:*)"
     ]
   },
   "disabledMcpjsonServers": [
